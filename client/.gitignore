@@ -1,0 +1,54 @@
+<<<<<<< HEAD
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
+
+# Local uploads and temporary files
+uploads/
+*.log
+.DS_Store
+
+# IDE / Editor folders
+.vscode/
+.idea/
+
+# Archives and compressed files
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+
+# Documentation and logs
+*.txt
+*.text
+*.log
+
+# Environment and sensitive data
+.env
+.env.local
+
+# Dependency and Build folders
+node_modules/
+dist/
+build/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+=======
+node_modules/
+backend/
+.env
+uploads/
+*.log
+dist/
+.DS_Store
+>>>>>>> 18e90e2 (first commit)
