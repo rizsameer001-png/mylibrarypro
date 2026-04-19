@@ -1,10 +1,11 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const path = require('path');
 const cron = require('node-cron');
-require('dotenv').config();
+
 
 const connectDB = require('./config/db');
 const { errorHandler } = require('./middleware/errorHandler');
@@ -24,6 +25,8 @@ const notificationRoutes = require('./routes/notifications');
 const reportRoutes = require('./routes/reports');
 const cmsRoutes = require('./routes/cms');
 const dashboardRoutes = require('./routes/dashboard');
+const galleryRoutes = require('./routes/gallery');
+const digitalRoutes  = require('./routes/digital');
 
 const app = express();
 
@@ -63,6 +66,8 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/cms', cmsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/books/:id/gallery', galleryRoutes);
+app.use('/api/digital', digitalRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

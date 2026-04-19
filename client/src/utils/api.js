@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/api',
+  //baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_URL, // ✅ FIXED
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -13,16 +14,37 @@ api.interceptors.request.use((config) => {
 });
 
 // Handle 401 globally
+// api.interceptors.response.use(
+//   (response) => response,
+//   (error) => {
+//     if (error.response?.status === 401) {
+//       localStorage.removeItem('lms_token');
+//       localStorage.removeItem('lms_user');
+//       window.location.href = '/login';
+//     }
+//     return Promise.reject(error);
+//   }
+// );
+
 api.interceptors.response.use(
-  (response) => response,
+  (response) => response, // ✅ KEEP FULL RESPONSE
   (error) => {
-    if (error.response?.status === 401) {
+    if (!error.response) {
+      toast.error('Network error. Please check your connection.');
+      return Promise.reject(error);
+    }
+
+    if (error.response.status === 401) {
       localStorage.removeItem('lms_token');
       localStorage.removeItem('lms_user');
       window.location.href = '/login';
     }
+
+    if (error.response.status === 403) {
+      toast.error('Access denied');
+    }
+
     return Promise.reject(error);
   }
 );
-
 export default api;

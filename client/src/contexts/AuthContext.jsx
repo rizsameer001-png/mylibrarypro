@@ -22,13 +22,31 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  // const login = async (email, password) => {
+  //   const { data } = await api.post('/auth/login', { email, password });
+  //   localStorage.setItem('lms_token', data.token);
+  //   localStorage.setItem('lms_user', JSON.stringify(data.user));
+  //   setUser(data.user);
+  //   return data.user;
+  // };
+
   const login = async (email, password) => {
-    const { data } = await api.post('/auth/login', { email, password });
-    localStorage.setItem('lms_token', data.token);
-    localStorage.setItem('lms_user', JSON.stringify(data.user));
-    setUser(data.user);
-    return data.user;
-  };
+  const { data } = await api.post('/auth/login', { email, password });
+
+  console.log("LOGIN RESPONSE:", data); // 🔍 MUST CHECK
+
+  // 🚫 Validate response properly
+  if (!data?.token || !data?.user) {
+    throw new Error(data?.message || 'Invalid login response');
+  }
+
+  localStorage.setItem('lms_token', data.token);
+  localStorage.setItem('lms_user', JSON.stringify(data.user));
+
+  setUser(data.user);
+
+  return data.user;
+};
 
   const register = async (formData) => {
     const { data } = await api.post('/auth/register', formData);

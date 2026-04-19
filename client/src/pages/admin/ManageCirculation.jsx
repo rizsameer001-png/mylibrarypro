@@ -148,17 +148,24 @@ export default function ManageCirculation() {
           <div>
             <label className="label">Book ID</label>
             <input className="input" placeholder="Enter book MongoDB ID" required
-              value={issueForm.bookId} onChange={e => setIssueForm({ ...issueForm, bookId: e.target.value })} />
+              // value={issueForm.bookId} onChange={e => setIssueForm({ ...issueForm, bookId: e.target.value })} />
+              value={issueForm.bookId} onChange={e => setIssueForm({ ...issueForm, bookId: e.target.value.trim() })} />
             <p className="text-xs text-gray-400 mt-1">Tip: Copy from the Books table</p>
           </div>
           <div>
             <label className="label">Member ID</label>
             <input className="input" placeholder="Enter member MongoDB ID" required
-              value={issueForm.memberId} onChange={e => setIssueForm({ ...issueForm, memberId: e.target.value })} />
+              // value={issueForm.memberId} onChange={e => setIssueForm({ ...issueForm, memberId: e.target.value })} />
+             value={issueForm.memberId} onChange={e => setIssueForm({ ...issueForm, memberId: e.target.value.trim() })} />
           </div>
           <div className="flex justify-end space-x-3 pt-2">
             <button type="button" onClick={() => setIssueModal(false)} className="btn-secondary">Cancel</button>
-            <button type="submit" className="btn-primary" disabled={saving}>
+            {/*<button type="submit" className="btn-primary" disabled={saving}>*/}
+            <button
+                type="submit"
+                className="btn-primary"
+                disabled={saving || !issueForm.bookId || !issueForm.memberId}
+              >
               {saving ? 'Issuing...' : 'Issue Book'}
             </button>
           </div>

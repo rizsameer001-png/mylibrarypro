@@ -4,6 +4,7 @@ taskkill /PID <PID> /F
 taskkill /PID 16364 /F
 
 ## Quick Start
+Admin@123 
 
 ```bash
 cp .env.example .env        # fill in your values

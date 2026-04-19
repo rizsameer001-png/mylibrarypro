@@ -138,17 +138,18 @@ export default function ManageCMS() {
               className="btn-primary mt-3 text-sm" disabled={addingTestimonial}>
               {addingTestimonial ? 'Adding...' : '+ Add Testimonial'}
             </button>*/}
-            <button
-                onClick={handleAddTestimonial}
-                disabled={
-                  addingTestimonial ||
-                  !newTestimonial.name.trim() ||
-                  !newTestimonial.comment.trim()
-                }
-                className="btn-primary mt-3 text-sm"
-              >
-                {addingTestimonial ? 'Adding...' : '+ Add Testimonial'}
-              </button>
+
+            <button 
+              onClick={handleAddTestimonial}
+              className="btn-primary mt-3 text-sm"
+              disabled={
+                addingTestimonial || 
+                !newTestimonial.name || 
+                !newTestimonial.comment
+              }
+            >
+              {addingTestimonial ? 'Adding...' : '+ Add Testimonial'}
+            </button>
           </div>
         </div>
       </div>

@@ -30,16 +30,7 @@ const seed = async () => {
   //   { name: 'Philosophy', icon: '🤔', description: 'Philosophy and ethics' },
   // ]);
 
-  const categories = await Category.insertMany([
-  { name: 'Fiction', slug: 'fiction', icon: '📖', description: 'Novels and fictional works' },
-  { name: 'Science', slug: 'science', icon: '🔬', description: 'Science and technology' },
-  { name: 'History', slug: 'history', icon: '🏛️', description: 'Historical accounts' },
-  { name: 'Biography', slug: 'biography', icon: '👤', description: 'Life stories' },
-  { name: 'Technology', slug: 'technology', icon: '💻', description: 'Computing and tech' },
-  { name: 'Self Help', slug: 'self-help', icon: '🌟', description: 'Personal development' },
-  { name: 'Children', slug: 'children', icon: '🧸', description: "Children's books" },
-  { name: 'Philosophy', slug: 'philosophy', icon: '🤔', description: 'Philosophy and ethics' },
-]);
+  const categories = await Category.insertMany([ { name: 'Fiction', slug: 'fiction', icon: '📖', description: 'Novels and fictional works' }, { name: 'Science', slug: 'science', icon: '🔬', description: 'Science and technology' }, { name: 'History', slug: 'history', icon: '🏛️', description: 'Historical accounts' }, { name: 'Biography', slug: 'biography', icon: '👤', description: 'Life stories' }, { name: 'Technology', slug: 'technology', icon: '💻', description: 'Computing and tech' }, { name: 'Self Help', slug: 'self-help', icon: '🌟', description: 'Personal development' }, { name: 'Children', slug: 'children', icon: '🧸', description: "Children's books" }, { name: 'Philosophy', slug: 'philosophy', icon: '🤔', description: 'Philosophy and ethics' }, ]);
 
   // Authors
   const authors = await Author.insertMany([

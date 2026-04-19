@@ -14,6 +14,7 @@ import Profile from './pages/Profile';
 
 // Member pages
 import MyBooks from './pages/member/MyBooks';
+import MyDownloads from './pages/member/MyDownloads';
 
 // Admin/Manager pages
 import Dashboard from './pages/admin/Dashboard';
@@ -30,6 +31,8 @@ import ManageMemberships from './pages/admin/ManageMemberships';
 // Layout
 import PublicLayout from './components/layout/PublicLayout';
 import AdminLayout from './components/layout/AdminLayout';
+
+import { CurrencyProvider } from './contexts/CurrencyContext';
 
 const PrivateRoute = ({ children, roles }) => {
   const { user, loading } = useAuth();
@@ -53,6 +56,7 @@ function AppRoutes() {
         <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
         <Route path="/my-books" element={<PrivateRoute roles={['member']}><MyBooks /></PrivateRoute>} />
+        <Route path="/my-downloads" element={<PrivateRoute roles={['member']}><MyDownloads /></PrivateRoute>} />
       </Route>
 
       {/* Admin/Manager routes */}
@@ -78,8 +82,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
-        <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
+        <CurrencyProvider> {/* ✅ ADDED */}
+          <AppRoutes />
+          <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
+        </CurrencyProvider> {/* ✅ ADDED */}
       </AuthProvider>
     </BrowserRouter>
   );

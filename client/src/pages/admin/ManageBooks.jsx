@@ -2,7 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../../utils/api';
 import { Modal, ConfirmDialog, LoadingSpinner, EmptyState, Pagination } from '../../components/ui/index';
 import toast from 'react-hot-toast';
-import { PlusIcon, PencilIcon, TrashIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, MagnifyingGlassIcon, BookOpenIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, MagnifyingGlassIcon, BookOpenIcon, PhotoIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
+// import { Modal } from '../../components/ui/index';
+import BookGallery from '../../components/books/BookGallery';
+import BookDigitalSettings from '../../components/books/BookDigitalSettings';
 
 const EMPTY = { title: '', isbn: '', description: '', language: 'English', publicationYear: '', totalCopies: 1, authors: [], categories: [], publisher: '', series: '', pages: '' };
 
@@ -17,6 +20,8 @@ export default function ManageBooks() {
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
+  const [galleryBook, setGalleryBook]   = useState(null);
+  const [digitalBook, setDigitalBook]   = useState(null);
   const [categories, setCategories] = useState([]);
   const [authors, setAuthors] = useState([]);
   const [publishers, setPublishers] = useState([]);
@@ -175,6 +180,12 @@ export default function ManageBooks() {
                       <button onClick={() => setDeleteId(book._id)} className="text-red-500 hover:text-red-700 p-1">
                         <TrashIcon className="h-4 w-4" />
                       </button>
+                      <button onClick={() => setGalleryBook(book)} className="text-purple-500 hover:text-purple-700 p-1" title="Manage gallery">
+                        <PhotoIcon className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => setDigitalBook(book)} className="text-green-600 hover:text-green-800 p-1" title="Digital settings">
+                        <Cog6ToothIcon className="h-4 w-4" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -277,6 +288,33 @@ export default function ManageBooks() {
 
       <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={handleDelete}
         title="Delete Book" message="Are you sure you want to delete this book? This action cannot be undone." danger />
+
+      {/* Gallery modal */}
+      <Modal open={!!galleryBook} onClose={() => setGalleryBook(null)}
+        title={`Gallery: ${galleryBook?.title || ''}`} size="xl">
+        {galleryBook && (
+          <BookGallery
+            bookId={galleryBook._id}
+            images={[]}
+            onChange={() => {}}
+          />
+        )}
+      </Modal>
+
+      {/* Digital settings modal */}
+      <Modal open={!!digitalBook} onClose={() => setDigitalBook(null)}
+        title={`Digital Settings: ${digitalBook?.title || ''}`} size="lg">
+        {digitalBook && (
+          <BookDigitalSettings
+            book={digitalBook}
+            onUpdated={(updated) => {
+              setBooks(prev => prev.map(b => b._id === updated._id ? { ...b, ...updated } : b));
+              setDigitalBook(updated);
+            }}
+            onClose={() => setDigitalBook(null)}
+          />
+        )}
+      </Modal>
     </div>
   );
 }

@@ -5,7 +5,15 @@ import { Link } from 'react-router-dom';
 // ── BookCard ──────────────────────────────────────────────────────────────────
 export const BookCard = ({ book, onReserve, reserved }) => {
   const available = book.availableCopies > 0;
-  const cover = book.coverImage ? `/${book.coverImage}` : null;
+  // const cover = book.coverImage ? `/${book.coverImage}` : null;
+  // const cover = book.coverImage
+  // ? `${import.meta.env.VITE_BASE_URL}/${book.coverImage}`
+  // : null;
+
+  const BASE_URL = import.meta.env.VITE_BASE_URL;
+  const cover = book.coverImage
+    ? `${BASE_URL}/${book.coverImage.replace(/^\/+/, '')}`
+    : null;
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col">
