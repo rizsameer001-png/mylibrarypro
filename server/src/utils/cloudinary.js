@@ -18,6 +18,7 @@ const fs   = require('fs');
 
 const USE_LOCAL = process.env.USE_LOCAL_STORAGE === 'true';
 const EXPIRES   = parseInt(process.env.CLOUDINARY_SIGNED_URL_EXPIRES || '300', 10);
+const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
 
 // Lazy-init Cloudinary so the server starts without crashing when keys are absent
 let _cloudinary = null;
@@ -54,23 +55,41 @@ const uploadToCloudinary = async (filePath, options = {}) => {
   const filename = path.basename(filePath);
   const rType    = options.resourceType || resourceType(filename);
 
+  // if (USE_LOCAL) {
+  //   // Dev fallback: copy file into a local sim folder and return a fake record
+  //   const folder = options.folder || 'misc';
+  //   const dest   = path.join(LOCAL_BASE, folder, filename);
+  //   ensureDir(path.dirname(dest));
+  //   fs.copyFileSync(filePath, dest);
+  //   // const publicId = `${folder}/${path.basename(filename, path.extname(filename))}`;
+  //   const publicId = `${folder}/${filename}`; // keep extension
+  //   return {
+  //     publicId,
+  //     // secureUrl:    `/uploads/cloudinary-sim/${folder}/${filename}`,
+  //     //secureUrl: `uploads/cloudinary-sim/${folder}/${filename}`,
+  //     secureUrl: `${BASE_URL}/uploads/cloudinary-sim/${folder}/${filename}`,
+  //     resourceType: rType,
+  //     bytes:        fs.statSync(filePath).size,
+  //     format:       path.extname(filename).replace('.', ''),
+  //   };
+  // }
+
   if (USE_LOCAL) {
-    // Dev fallback: copy file into a local sim folder and return a fake record
-    const folder = options.folder || 'misc';
-    const dest   = path.join(LOCAL_BASE, folder, filename);
-    ensureDir(path.dirname(dest));
-    fs.copyFileSync(filePath, dest);
-    // const publicId = `${folder}/${path.basename(filename, path.extname(filename))}`;
-    const publicId = `${folder}/${filename}`; // keep extension
-    return {
-      publicId,
-      // secureUrl:    `/uploads/cloudinary-sim/${folder}/${filename}`,
-      secureUrl: `uploads/cloudinary-sim/${folder}/${filename}`,
-      resourceType: rType,
-      bytes:        fs.statSync(filePath).size,
-      format:       path.extname(filename).replace('.', ''),
-    };
-  }
+  const folder = options.folder || 'misc';
+  const dest   = path.join(LOCAL_BASE, folder, filename);
+  ensureDir(path.dirname(dest));
+  fs.copyFileSync(filePath, dest);
+
+  const publicId = `${folder}/${filename}`;
+
+  return {
+    publicId,
+    secureUrl: `${BASE_URL}/uploads/cloudinary-sim/${folder}/${filename}`,
+    resourceType: rType,
+    bytes: fs.statSync(filePath).size,
+    format: path.extname(filename).replace('.', ''),
+  };
+}
 
   const result = await cld().uploader.upload(filePath, {
     resource_type:  rType,

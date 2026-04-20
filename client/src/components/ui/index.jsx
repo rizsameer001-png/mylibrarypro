@@ -10,7 +10,9 @@ export const BookCard = ({ book, onReserve, reserved }) => {
   // ? `${import.meta.env.VITE_BASE_URL}/${book.coverImage}`
   // : null;
 
-  const BASE_URL = import.meta.env.VITE_BASE_URL;
+  //const BASE_URL = import.meta.env.VITE_BASE_URL;
+  // 1. Get the Base URL from env
+  const BASE_URL = import.meta.env.VITE_BASE_URL || 'http://localhost:5000'; // Added fallback
   const cover = book.coverImage
     ? `${BASE_URL}/${book.coverImage.replace(/^\/+/, '')}`
     : null;
