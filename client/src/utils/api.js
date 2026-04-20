@@ -1,4 +1,5 @@
 import axios from 'axios';
+import toast from 'react-hot-toast'; // ✅ FIX ADDED
 
 const api = axios.create({
   //baseURL: '/api',

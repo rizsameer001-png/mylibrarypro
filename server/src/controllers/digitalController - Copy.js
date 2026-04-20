@@ -1,26 +1,16 @@
-/**
- * digitalController.js
- * Handles: digital file upload (Cloudinary), reading access, purchases, downloads, progress tracking
- */
 const fs   = require('fs');
 const path = require('path');
 const Book = require('../models/Book');
 const { DigitalPurchase, ReadingSession } = require('../models/digital');
-const {
-  uploadToCloudinary,
-  getCloudinarySignedUrl,
-  getCloudinaryDownloadUrl,
-  getCloudinaryBuffer,
-  deleteFromCloudinary,
-} = require('../utils/cloudinary');
-const { watermarkPdf }    = require('../utils/storage');
-const { sendEmail }       = require('../utils/email');
-const { logActivity }     = require('../utils/activityLogger');
+// const { getSignedUrl, uploadToS3, watermarkPdf } = require('../utils/storage');
+const { uploadToCloudinary } = require('../utils/cloudinary');
+const { sendEmail } = require('../utils/email');
+const { logActivity } = require('../utils/activityLogger');
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  ADMIN: upload digital file to Cloudinary
-//  POST /api/digital/:bookId/upload
+//  ADMIN: upload the digital PDF file to S3 / local store
 // ─────────────────────────────────────────────────────────────────────────────
+// POST /api/digital/:bookId/upload
 const uploadDigitalFile = async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
@@ -28,90 +18,82 @@ const uploadDigitalFile = async (req, res, next) => {
     const book = await Book.findById(req.params.bookId);
     if (!book) return res.status(404).json({ success: false, message: 'Book not found' });
 
-    // Delete old Cloudinary file if exists
-    if (book.cloudinaryPublicId) {
-      await deleteFromCloudinary(book.cloudinaryPublicId, 'raw').catch(() => {});
-    }
+    const buffer   = fs.readFileSync(req.file.path);
+    const ext      = path.extname(req.file.originalname).toLowerCase();
+    const s3Key    = `ebooks/${req.params.bookId}/${Date.now()}${ext}`;
+    const mimeType = ext === '.pdf' ? 'application/pdf' : 'application/epub+zip';
 
-    const ext      = path.extname(req.file.originalname).toLowerCase().replace('.', '');
-    const result   = await uploadToCloudinary(req.file.path, {
-      folder:       'lms/ebooks',
-      resourceType: 'raw',
-    });
+    await uploadToS3(buffer, s3Key, mimeType);
 
-    // Cleanup temp file
-    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    // Clean up temp file
+    fs.unlinkSync(req.file.path);
 
-    // Count PDF pages optionally
+    // Attempt to count PDF pages (optional, needs pdf-lib)
     let pageCount;
     try {
       const { PDFDocument } = require('pdf-lib');
-      const buf = fs.readFileSync(req.file.path);
-      pageCount = (await PDFDocument.load(buf)).getPageCount();
-    } catch {}
+      const doc = await PDFDocument.load(buffer);
+      pageCount = doc.getPageCount();
+    } catch { /* pdf-lib not installed — skip */ }
 
     await Book.findByIdAndUpdate(req.params.bookId, {
-      isEbook:             true,
-      ebookFormat:         ext,
-      cloudinaryPublicId:  result.publicId,
-      cloudinarySecureUrl: result.secureUrl,
-      cloudinaryBytes:     result.bytes,
+      isEbook:        true,
+      ebookFormat:    ext.replace('.', ''),
+      digitalFileKey: s3Key,
+      digitalFileSize: buffer.length,
       ...(pageCount ? { readingPageCount: pageCount } : {}),
     });
 
-    await logActivity(req.user._id, 'UPLOAD_DIGITAL', `Uploaded file for "${book.title}"`, req.ip, 'Digital');
-    res.json({ success: true, publicId: result.publicId, secureUrl: result.secureUrl, pageCount });
+    await logActivity(req.user._id, 'UPLOAD_DIGITAL', `Uploaded digital file for book ${book.title}`, req.ip, 'Digital');
+    res.json({ success: true, s3Key, pageCount });
   } catch (e) { next(e); }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  ADMIN: update reading/download/sale settings
-//  PUT /api/digital/:bookId/reading-settings
+//  ADMIN: toggle reading-access settings
 // ─────────────────────────────────────────────────────────────────────────────
+// PUT /api/digital/:bookId/reading-settings
 const updateReadingSettings = async (req, res, next) => {
   try {
-    const fields = ['readingEnabled', 'readingAccessLevel', 'isDigitalSale', 'digitalPrice', 'watermarkEnabled', 'downloadEnabled'];
-    const update = {};
-    fields.forEach(f => { if (f in req.body) update[f] = req.body[f]; });
-
-    const book = await Book.findByIdAndUpdate(req.params.bookId, update, { new: true });
+    const { readingEnabled, readingAccessLevel, isDigitalSale, digitalPrice, watermarkEnabled, maxDownloads } = req.body;
+    const book = await Book.findByIdAndUpdate(
+      req.params.bookId,
+      { readingEnabled, readingAccessLevel, isDigitalSale, digitalPrice, watermarkEnabled },
+      { new: true },
+    );
     if (!book) return res.status(404).json({ success: false, message: 'Book not found' });
     res.json({ success: true, book });
   } catch (e) { next(e); }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  MEMBER: get signed Cloudinary URL for in-browser reading
-//  GET /api/digital/:bookId/read
+//  MEMBER: check reading permission & get signed URL for in-browser reader
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/digital/:bookId/read
 const getReadUrl = async (req, res, next) => {
   try {
     const book = await Book.findById(req.params.bookId);
     if (!book) return res.status(404).json({ success: false, message: 'Book not found' });
-
     if (!book.readingEnabled) {
       return res.status(403).json({ success: false, message: 'Online reading is not enabled for this book' });
     }
-    if (!book.cloudinaryPublicId && !book.ebookFile) {
-      return res.status(404).json({ success: false, message: 'Digital file not yet uploaded' });
+    if (!book.digitalFileKey) {
+      return res.status(404).json({ success: false, message: 'Digital file not available' });
     }
 
-    // Access level check
-    if (book.readingAccessLevel === 'premium') {
+    // Access-level gate
+    const level = book.readingAccessLevel || 'member';
+    if (level === 'premium') {
+      // Check that user has an active premium membership
       const User = require('../models/User');
+      const { MembershipPlan } = require('../models/index');
       const user = await User.findById(req.user._id).populate('membershipPlan');
-      if (!user?.membershipPlan?.ebookAccess) {
-        return res.status(403).json({ success: false, message: 'Premium membership required' });
+      if (!user.membershipPlan?.ebookAccess) {
+        return res.status(403).json({ success: false, message: 'Premium membership required to read this book online' });
       }
     }
 
-    // Build URL — Cloudinary (signed) or legacy local path
-    let url;
-    if (book.cloudinaryPublicId) {
-      url = getCloudinarySignedUrl(book.cloudinaryPublicId, 'raw');
-    } else {
-      url = `/${book.ebookFile}`;
-    }
+    const url = await getSignedUrl(book.digitalFileKey);
 
     // Upsert reading session
     await ReadingSession.findOneAndUpdate(
@@ -125,16 +107,23 @@ const getReadUrl = async (req, res, next) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  MEMBER: save reading progress
-//  PUT /api/digital/:bookId/progress
+//  MEMBER: update reading progress
 // ─────────────────────────────────────────────────────────────────────────────
+// PUT /api/digital/:bookId/progress
 const updateProgress = async (req, res, next) => {
   try {
     const { currentPage, totalPages } = req.body;
     const progress = totalPages ? Math.round((currentPage / totalPages) * 100) : 0;
-    const session  = await ReadingSession.findOneAndUpdate(
+
+    const session = await ReadingSession.findOneAndUpdate(
       { book: req.params.bookId, member: req.user._id },
-      { currentPage, totalPages, progress, lastReadAt: new Date(), completed: progress >= 100 },
+      {
+        currentPage,
+        totalPages,
+        progress,
+        lastReadAt: new Date(),
+        completed:  progress >= 100,
+      },
       { upsert: true, new: true },
     );
     res.json({ success: true, session });
@@ -143,8 +132,8 @@ const updateProgress = async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  MEMBER: add a reading note
-//  POST /api/digital/:bookId/notes
 // ─────────────────────────────────────────────────────────────────────────────
+// POST /api/digital/:bookId/notes
 const addNote = async (req, res, next) => {
   try {
     const { page, text } = req.body;
@@ -159,42 +148,45 @@ const addNote = async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  MEMBER: purchase a digital book
-//  POST /api/digital/:bookId/purchase
 // ─────────────────────────────────────────────────────────────────────────────
+// POST /api/digital/:bookId/purchase
 const purchaseBook = async (req, res, next) => {
   try {
     const book = await Book.findById(req.params.bookId);
-    if (!book)            return res.status(404).json({ success: false, message: 'Book not found' });
-    if (!book.isDigitalSale) return res.status(400).json({ success: false, message: 'Not available for purchase' });
+    if (!book) return res.status(404).json({ success: false, message: 'Book not found' });
+    if (!book.isDigitalSale) return res.status(400).json({ success: false, message: 'This book is not available for purchase' });
 
-    // Idempotency
+    // Idempotency: don't double-charge
     const existing = await DigitalPurchase.findOne({ book: book._id, member: req.user._id, status: 'completed' });
     if (existing) return res.status(409).json({ success: false, message: 'Already purchased', purchase: existing });
 
     const { paymentId, paymentProvider = 'stripe', amountPaid, currency = 'USD' } = req.body;
 
+    // In a real implementation you'd verify the payment server-side with Stripe/Razorpay here.
+    // For now we trust the client-provided paymentId (replace with webhook logic).
+
     const purchase = await DigitalPurchase.create({
-      book:         book._id,
-      member:       req.user._id,
+      book:            book._id,
+      member:          req.user._id,
       paymentProvider,
       paymentId,
-      amountPaid:   amountPaid || book.digitalPrice,
+      amountPaid:      amountPaid || book.digitalPrice,
       currency,
-      status:       'completed',
-      completedAt:  new Date(),
-      maxDownloads: parseInt(process.env.MAX_DOWNLOADS || '5', 10),
+      status:          'completed',
+      completedAt:     new Date(),
+      maxDownloads:    parseInt(process.env.MAX_DOWNLOADS || '5', 10),
     });
 
-    // Delivery email
+    // Send delivery email
     const User = require('../models/User');
     const user = await User.findById(req.user._id);
     sendEmail({
       to:      user.email,
       subject: `Your purchase: ${book.title}`,
       html:    `<p>Hi ${user.name},</p>
-                <p>Thank you for purchasing <b>${book.title}</b>!
-                You can now read it online or download it from <b>My Downloads</b>.</p>
-                <p>Downloads available: <b>${purchase.maxDownloads}</b></p>`,
+                <p>Thank you for purchasing <b>${book.title}</b>! 
+                   You can now download or read it online from your <b>My Downloads</b> section.</p>
+                <p>You have up to <b>${purchase.maxDownloads}</b> downloads available.</p>`,
     }).catch(console.error);
 
     await logActivity(req.user._id, 'PURCHASE_DIGITAL', `Purchased "${book.title}"`, req.ip, 'Digital');
@@ -203,103 +195,86 @@ const purchaseBook = async (req, res, next) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  MEMBER: get a signed download URL (with optional watermark)
-//  GET /api/digital/:bookId/download
+//  MEMBER: request a signed download URL (with optional watermark)
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/digital/:bookId/download
 const downloadBook = async (req, res, next) => {
   try {
     const book = await Book.findById(req.params.bookId);
     if (!book) return res.status(404).json({ success: false, message: 'Book not found' });
+    if (!book.digitalFileKey) return res.status(404).json({ success: false, message: 'No digital file' });
 
-    if (!book.cloudinaryPublicId && !book.ebookFile) {
-      return res.status(404).json({ success: false, message: 'No digital file available' });
-    }
-
-    // Paid gate
+    // Must have purchased (if it's a paid product)
     if (book.isDigitalSale) {
-      const purchase = await DigitalPurchase.findOne({ book: book._id, member: req.user._id, status: 'completed' });
+      const purchase = await DigitalPurchase.findOne({
+        book:   book._id,
+        member: req.user._id,
+        status: 'completed',
+      });
       if (!purchase) return res.status(403).json({ success: false, message: 'Purchase required' });
       if (purchase.downloadCount >= purchase.maxDownloads) {
         return res.status(403).json({ success: false, message: 'Download limit reached' });
       }
 
-      // Watermark flow
-      let publicId = book.cloudinaryPublicId;
-      if (book.watermarkEnabled && book.ebookFormat === 'pdf' && book.cloudinaryPublicId) {
-        if (!purchase.watermarkedPublicId) {
-          const User      = require('../models/User');
-          const user      = await User.findById(req.user._id);
-          const tmpIn     = path.join('/tmp', `orig_${Date.now()}.pdf`);
-          const tmpOut    = path.join('/tmp', `wm_${Date.now()}.pdf`);
+      // Watermark & serve
+      let fileKey = book.digitalFileKey;
+      if (book.watermarkEnabled && book.ebookFormat === 'pdf') {
+        // Check if we already cached a watermarked version for this user
+        if (!purchase.watermarkedKey) {
+          const User = require('../models/User');
+          const user = await User.findById(req.user._id);
 
-          // Download original
-          const origBuffer = await getCloudinaryBuffer(book.cloudinaryPublicId, 'raw');
-          fs.writeFileSync(tmpIn, origBuffer);
+          // Fetch original from storage
+          const { getObjectBuffer } = require('../utils/storage');
+          const originalBuffer = await getObjectBuffer(book.digitalFileKey);
+          const watermarked    = await watermarkPdf(originalBuffer, user.email);
 
-          // Watermark
-          const wmBuffer = await watermarkPdf(origBuffer, user.email);
-          fs.writeFileSync(tmpOut, wmBuffer);
-
-          // Upload watermarked version
-          const wmResult = await uploadToCloudinary(tmpOut, { folder: 'lms/watermarked', resourceType: 'raw' });
-
-          // Cleanup
-          [tmpIn, tmpOut].forEach(f => { try { fs.unlinkSync(f); } catch {} });
-
-          await DigitalPurchase.findByIdAndUpdate(purchase._id, { watermarkedPublicId: wmResult.publicId });
-          publicId = wmResult.publicId;
+          const wKey = `ebooks/${book._id}/wm_${req.user._id}.pdf`;
+          await uploadToS3(watermarked, wKey, 'application/pdf');
+          await DigitalPurchase.findByIdAndUpdate(purchase._id, { watermarkedKey: wKey });
+          fileKey = wKey;
         } else {
-          publicId = purchase.watermarkedPublicId;
+          fileKey = purchase.watermarkedKey;
         }
       }
 
-      // Increment download count
+      // Increment counter
       await DigitalPurchase.findByIdAndUpdate(purchase._id, {
         $inc: { downloadCount: 1 },
         lastDownloadAt: new Date(),
       });
 
-      const url     = getCloudinaryDownloadUrl(publicId, 'raw');
-      const expires = parseInt(process.env.CLOUDINARY_SIGNED_URL_EXPIRES || '300', 10);
-      return res.json({ success: true, url, expiresIn: expires });
+      const url = await getSignedUrl(fileKey);
+      return res.json({ success: true, url, expiresIn: parseInt(process.env.SIGNED_URL_EXPIRES_SECONDS || '300') });
     }
 
-    // Free downloadable book
-    if (!book.downloadEnabled) {
-      return res.status(403).json({ success: false, message: 'Download not enabled for this book' });
-    }
-
-    const url     = book.cloudinaryPublicId
-      ? getCloudinaryDownloadUrl(book.cloudinaryPublicId, 'raw')
-      : `/${book.ebookFile}`;
-    const expires = parseInt(process.env.CLOUDINARY_SIGNED_URL_EXPIRES || '300', 10);
-    res.json({ success: true, url, expiresIn: expires });
+    // Free ebook — still use signed URL for consistency
+    const url = await getSignedUrl(book.digitalFileKey);
+    res.json({ success: true, url, expiresIn: 300 });
   } catch (e) { next(e); }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  MEMBER: list my purchases
-//  GET /api/digital/my-purchases
+//  MEMBER: my purchases list
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/digital/my-purchases
 const myPurchases = async (req, res, next) => {
   try {
-    const purchases = await DigitalPurchase
-      .find({ member: req.user._id, status: 'completed' })
-      .populate('book', 'title coverImage authors ebookFormat digitalPrice cloudinaryPublicId')
+    const purchases = await DigitalPurchase.find({ member: req.user._id, status: 'completed' })
+      .populate('book', 'title coverImage authors ebookFormat digitalPrice')
       .sort('-completedAt');
     res.json({ success: true, purchases });
   } catch (e) { next(e); }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  MEMBER: list my reading sessions
-//  GET /api/digital/my-reading
+//  MEMBER: my reading sessions
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/digital/my-reading
 const myReadingSessions = async (req, res, next) => {
   try {
-    const sessions = await ReadingSession
-      .find({ member: req.user._id })
-      .populate('book', 'title coverImage authors readingPageCount readingEnabled')
+    const sessions = await ReadingSession.find({ member: req.user._id })
+      .populate('book', 'title coverImage authors readingPageCount')
       .sort('-lastReadAt');
     res.json({ success: true, sessions });
   } catch (e) { next(e); }

@@ -17,34 +17,13 @@ const getBooks = async (req, res, next) => {
   try {
     const { search, category, author, language, status, isEbook, bookType, page=1, limit=12, sort='-createdAt' } = req.query;
     const query = {};
+    if (search)   query.$text = { $search: search };
     if (category) query.categories = category;
     if (author)   query.authors = author;
     if (language) query.language = language;
     if (status)   query.status = status;
     if (bookType) query.bookType = bookType;
     if (isEbook !== undefined) query.isEbook = isEbook === 'true';
-
-    // Smart search: try text index first, fall back to regex for partial/author matches
-    let bookIds = null;
-    if (search) {
-      const { Author } = require('../models/index');
-      // Find authors matching search term
-      const matchingAuthors = await Author.find({ name: { $regex: search, $options: 'i' } }).select('_id');
-      if (matchingAuthors.length > 0) {
-        // Combine text search with author match
-        query.$or = [
-          { $text: { $search: search } },
-          { authors: { $in: matchingAuthors.map(a => a._id) } },
-          { title: { $regex: search, $options: 'i' } },
-        ];
-      } else {
-        // Regex on title + isbn fallback (handles partial matches better than text index)
-        query.$or = [
-          { title: { $regex: search, $options: 'i' } },
-          { isbn:  { $regex: search, $options: 'i' } },
-        ];
-      }
-    }
 
     const [total, books, currency] = await Promise.all([
       Book.countDocuments(query),

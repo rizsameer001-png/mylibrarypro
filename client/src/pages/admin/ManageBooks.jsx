@@ -159,8 +159,10 @@ export default function ManageBooks() {
                     <div className="truncate">{book.title}</div>
                     {book.isbn && <div className="text-xs text-gray-400">{book.isbn}</div>}
                   </td>
-                  <td className="td text-gray-500 text-xs">{book.authors?.map(a => a.name).join(', ') || '—'}</td>
-                  <td className="td text-xs">{book.categories?.map(c => c.name).join(', ') || '—'}</td>
+                 {/* <td className="td text-gray-500 text-xs">{book.authors?.map(a => a.name).join(', ') || '—'}</td>*/}
+                  <td className="td text-gray-500 text-xs">{book.authors?.filter(Boolean).map(a => a?.name).filter(Boolean).join(', ') || '—'}</td>
+                  {/*<td className="td text-xs">{book.categories?.map(c => c.name).join(', ') || '—'}</td>*/}
+                   <td className="td text-xs">{book.categories?.filter(Boolean).map(c => c?.name).filter(Boolean).join(', ') || '—'}</td>
                   <td className="td text-center">{book.totalCopies}</td>
                   <td className="td text-center">
                     <span className={`badge ${book.availableCopies > 0 ? 'badge-green' : 'badge-red'}`}>
