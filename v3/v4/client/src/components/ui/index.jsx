@@ -1,7 +1,7 @@
 import { BookOpenIcon, BookmarkIcon } from '@heroicons/react/24/outline';
 import { BookmarkIcon as BookmarkSolid } from '@heroicons/react/24/solid';
 import { Link } from 'react-router-dom';
-import { getImageUrl, imgOnError, PLACEHOLDER } from '../../utils/image';
+import { getImageUrl, imgOnError, PLACEHOLDER } from '../utils/image';
 
 // ── BookCard ───────────────────────────────────────────────────────────────────
 export const BookCard = ({ book, onReserve, reserved, priceDisplay }) => {

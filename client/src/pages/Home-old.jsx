@@ -11,11 +11,12 @@ import {
 } from '@heroicons/react/24/outline';
 import { StarIcon } from '@heroicons/react/24/solid';
 
+// Standardized features list
 const features = [
-  { icon: BookOpenIcon,        title: 'Vast Collection',      desc: 'Over 10,000 books across all genres and subjects.' },
-  { icon: DevicePhoneMobileIcon, title: 'Mobile App',         desc: 'Access your library from anywhere with our Flutter app.' },
-  { icon: BellIcon,            title: 'Smart Notifications',  desc: 'Get reminded about due dates and new arrivals.' },
-  { icon: BookOpenIcon,        title: 'E-Books & PDFs',       desc: 'Read or download digital books online anytime.' },
+  { icon: BookOpenIcon, title: 'Vast Collection', desc: 'Over 10,000 books across all genres and subjects.' },
+  { icon: DevicePhoneMobileIcon, title: 'Mobile App', desc: 'Access your library from anywhere with our Flutter app.' },
+  { icon: BellIcon, title: 'Smart Notifications', desc: 'Get reminded about due dates and new arrivals.' },
+  { icon: BookOpenIcon, title: 'E-Books & PDFs', desc: 'Read or download digital books online anytime.' },
 ];
 
 // ── Membership Plan Card ────────────────────────────────────────────────────────
@@ -80,12 +81,12 @@ export default function Home() {
   const { user } = useAuth();
   const { formatPrice } = useCurrency();
   const navigate = useNavigate();
-  const [search, setSearch]         = useState('');
+  const [search, setSearch] = useState('');
   const [popularBooks, setPopularBooks] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [cms, setCms]               = useState(null);
+  const [cms, setCms] = useState(null);
   const [testimonials, setTestimonials] = useState([]);
-  const [plans, setPlans]           = useState([]);
+  const [plans, setPlans] = useState([]);
 
   useEffect(() => {
     api.get('/books/popular').then(({ data }) => setPopularBooks(data.books)).catch(() => {});
@@ -156,7 +157,8 @@ export default function Home() {
             {categories.map(cat => (
               <Link key={cat._id} to={`/books?category=${cat._id}`}
                 className="flex flex-col items-center p-4 bg-white border border-gray-100 rounded-xl hover:border-primary-300 hover:shadow-md transition-all text-center">
-                <span className="text-2xl mb-2">{cat.icon || '📚'}</span>
+                {/* Fixed: Ensuring the icon renders as text/string, not a tag */}
+                <span className="text-2xl mb-2">{String(cat.icon || '📚')}</span>
                 <span className="text-xs font-medium text-gray-700">{cat.name}</span>
               </Link>
             ))}
@@ -183,44 +185,28 @@ export default function Home() {
       )}
 
       {/* ── Features ──────────────────────────────────────────────────────────── */}
-{/*      <section className="max-w-7xl mx-auto px-4 py-14">
+      <section className="max-w-7xl mx-auto px-4 py-14">
         <h2 className="text-2xl font-bold text-gray-900 mb-10 text-center">Why Choose Us?</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {(cms?.featuresSection?.length ? cms.featuresSection : features).map((f, i) => (
-            <div key={i} className="text-center p-6 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="text-3xl mb-3">{f.icon || '✨'}</div>
-              <h3 className="font-semibold text-gray-900 mb-2">{f.title}</h3>
-              <p className="text-sm text-gray-500 leading-relaxed">{f.description || f.desc}</p>
-            </div>
-          ))}
+          {(cms?.featuresSection?.length ? cms.featuresSection : features).map((f, i) => {
+             // Correctly handle dynamic Icons vs Lucide/HeroIcons
+             const Icon = f.icon;
+             return (
+              <div key={i} className="text-center p-6 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                <div className="text-3xl mb-3">
+                  {typeof Icon === 'function' || typeof Icon === 'object' ? (
+                     <Icon className="h-8 w-8 mx-auto text-primary-600" />
+                  ) : (
+                    <span className="h-8 w-8 mx-auto block">{Icon || '✨'}</span>
+                  )}
+                </div>
+                <h3 className="font-semibold text-gray-900 mb-2">{f.title}</h3>
+                <p className="text-sm text-gray-500 leading-relaxed">{f.description || f.desc}</p>
+              </div>
+            );
+          })}
         </div>
-      </section>*/}
-
-      {/* ── Features ──────────────────────────────────────────────────────────── */}
-<section className="max-w-7xl mx-auto px-4 py-14">
-  <h2 className="text-2xl font-bold text-gray-900 mb-10 text-center">Why Choose Us?</h2>
-  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-    {(cms?.featuresSection?.length ? cms.featuresSection : features).map((f, i) => {
-      // Create a local reference with a Capital letter so JSX recognizes it
-      const IconComponent = f.icon; 
-      
-      return (
-        <div key={i} className="text-center p-6 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-          <div className="text-3xl mb-3 flex justify-center text-primary-600">
-            {/* Check if it's a component or a string (emoji) */}
-            {typeof f.icon === 'function' || typeof f.icon === 'object' ? (
-              <IconComponent className="h-8 w-8" />
-            ) : (
-              <span>{f.icon || '✨'}</span>
-            )}
-          </div>
-          <h3 className="font-semibold text-gray-900 mb-2">{f.title}</h3>
-          <p className="text-sm text-gray-500 leading-relaxed">{f.description || f.desc}</p>
-        </div>
-      );
-    })}
-  </div>
-</section>
+      </section>
 
       {/* ── Membership Plans ──────────────────────────────────────────────────── */}
       {plans.length > 0 && (
