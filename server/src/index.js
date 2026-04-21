@@ -27,6 +27,7 @@ const cmsRoutes = require('./routes/cms');
 const dashboardRoutes = require('./routes/dashboard');
 const galleryRoutes = require('./routes/gallery');
 const digitalRoutes  = require('./routes/digital');
+const cloudinaryRoutes = require('./routes/cloudinary');
 
 const app = express();
 
@@ -68,6 +69,7 @@ app.use('/api/cms', cmsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/books/:id/gallery', galleryRoutes);
 app.use('/api/digital', digitalRoutes);
+app.use('/api/cloudinary', cloudinaryRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

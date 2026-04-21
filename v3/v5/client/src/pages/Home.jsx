@@ -188,10 +188,7 @@ export default function Home() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {(cms?.featuresSection?.length ? cms.featuresSection : features).map((f, i) => (
             <div key={i} className="text-center p-6 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-              {/*<div className="text-3xl mb-3">{f.icon || '✨'}</div>*/}
-              <div className="text-3xl mb-3">
-                 {f.icon ? <f.icon className="h-8 w-8 mx-auto" /> : '✨'}
-              </div>
+              <div className="text-3xl mb-3">{f.icon || '✨'}</div>
               <h3 className="font-semibold text-gray-900 mb-2">{f.title}</h3>
               <p className="text-sm text-gray-500 leading-relaxed">{f.description || f.desc}</p>
             </div>

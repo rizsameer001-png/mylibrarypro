@@ -48,7 +48,6 @@ export default function ManageBooks() {
   const [coverData, setCoverData]   = useState(null);  // { secureUrl, publicId }
   const [ebookData, setEbookData]   = useState(null);  // { secureUrl, publicId, format }
   const [coverPreview, setCoverPreview] = useState(null);
-  const [coverFile, setCoverFile] = useState(null); //new Added
   const [saving, setSaving]     = useState(false);
   const [deleteId, setDeleteId] = useState(null);
   const [galleryBook, setGalleryBook] = useState(null);
@@ -86,15 +85,6 @@ export default function ManageBooks() {
   };
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  // ✅ ADD HERE
-      const handleCoverChange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        setCoverFile(file);
-        setCoverPreview(URL.createObjectURL(file));
-      };
 
   const openCreate = () => {
     setEditBook(null);
@@ -470,22 +460,10 @@ export default function ManageBooks() {
                 <span>{coverFile ? coverFile.name : 'Choose cover image'}</span>
                 <input type="file" className="hidden" accept="image/*" onChange={handleCoverChange} />
               </label>
-{/*              {coverFile && (
+              {coverFile && (
                 <button type="button" onClick={() => { setCoverFile(null); setCoverPreview(editBook ? getImageUrl(editBook.coverImage) : null); }}
                   className="text-xs text-red-500">Remove</button>
-              )}*/}
-              {coverFile && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCoverFile(null);
-                      setCoverPreview(editBook ? getImageUrl(editBook.coverImage) : null);
-                    }}
-                    className="text-xs text-red-500"
-                  >
-                    Remove
-                  </button>
-                )}
+              )}
             </div>
           </div>
 

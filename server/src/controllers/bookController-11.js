@@ -1,13 +1,3 @@
-/**
- * bookController.js
- *
- * Upload strategy (production / Render):
- *   Client uploads file DIRECTLY to Cloudinary → gets back { secureUrl, publicId }
- *   Client sends those values in the JSON body — no file hits our server.
- *
- * Legacy fallback (USE_LOCAL_STORAGE=true / dev):
- *   Client sends multipart file → server uploads to Cloudinary sim folder.
- */
 const path = require('path');
 const fs   = require('fs');
 const Book = require('../models/Book');
@@ -22,7 +12,7 @@ const getCurrency  = async () => { const s = await SystemSettings.findOne(); ret
 const cleanupTemp  = (p) => { try { if (p && fs.existsSync(p)) fs.unlinkSync(p); } catch {} };
 const parseBool    = (v) => v === 'true' || v === true;
 
-// ── GET /api/books ──────────────────────────────────────────────────────────
+// ── GET /api/books ─────────────────────────────────────────────────────────────
 const getBooks = async (req, res, next) => {
   try {
     const { search, category, author, language, status, isEbook, bookType, page=1, limit=12, sort='-createdAt' } = req.query;
@@ -34,16 +24,21 @@ const getBooks = async (req, res, next) => {
     if (bookType) query.bookType = bookType;
     if (isEbook !== undefined) query.isEbook = isEbook === 'true';
 
+    // Smart search: try text index first, fall back to regex for partial/author matches
+    let bookIds = null;
     if (search) {
       const { Author } = require('../models/index');
+      // Find authors matching search term
       const matchingAuthors = await Author.find({ name: { $regex: search, $options: 'i' } }).select('_id');
       if (matchingAuthors.length > 0) {
+        // Combine text search with author match
         query.$or = [
+          { $text: { $search: search } },
           { authors: { $in: matchingAuthors.map(a => a._id) } },
-          { title:   { $regex: search, $options: 'i' } },
-          { isbn:    { $regex: search, $options: 'i' } },
+          { title: { $regex: search, $options: 'i' } },
         ];
       } else {
+        // Regex on title + isbn fallback (handles partial matches better than text index)
         query.$or = [
           { title: { $regex: search, $options: 'i' } },
           { isbn:  { $regex: search, $options: 'i' } },
@@ -67,6 +62,7 @@ const getBooks = async (req, res, next) => {
   } catch(e) { next(e); }
 };
 
+// ── GET /api/books/popular ─────────────────────────────────────────────────────
 const getPopularBooks = async (req, res, next) => {
   try {
     const [books, currency] = await Promise.all([
@@ -77,6 +73,7 @@ const getPopularBooks = async (req, res, next) => {
   } catch(e) { next(e); }
 };
 
+// ── GET /api/books/:id ─────────────────────────────────────────────────────────
 const getBook = async (req, res, next) => {
   try {
     const [book, currency] = await Promise.all([
@@ -89,84 +86,53 @@ const getBook = async (req, res, next) => {
   } catch(e) { next(e); }
 };
 
-// ── Shared helper: extract image/ebook data from request ────────────────────
-// Supports BOTH direct-upload (URL in body) and legacy multipart (file upload)
-const extractMediaFromRequest = async (req, temps = []) => {
-  const result = {};
-
-  // ── Cover image ────────────────────────────────────────────────────────────
-  // Priority 1: client already uploaded to Cloudinary → sends URLs in body
-  if (req.body.coverImage && (req.body.coverImage.startsWith('http') || req.body.coverImage.startsWith('/'))) {
-    result.coverImage        = req.body.coverImage;
-    result.coverImagePublicId = req.body.coverImagePublicId || '';
-  }
-  // Priority 2: legacy multipart file → upload now
-  const coverFile = req.files?.cover?.[0];
-  if (coverFile) {
-    temps.push(coverFile.path);
-    const r = await uploadToCloudinary(coverFile.path, { folder:'lms/covers', resourceType:'image' });
-    result.coverImage         = r.secureUrl;
-    result.coverImagePublicId = r.publicId;
-    cleanupTemp(coverFile.path);
-  }
-
-  // ── Digital file ───────────────────────────────────────────────────────────
-  // Priority 1: client already uploaded to Cloudinary
-  if (req.body.cloudinarySecureUrl && req.body.cloudinarySecureUrl.startsWith('http')) {
-    result.isEbook             = true;
-    result.ebookFormat         = req.body.ebookFormat || '';
-    result.cloudinaryPublicId  = req.body.cloudinaryPublicId || '';
-    result.cloudinarySecureUrl = req.body.cloudinarySecureUrl;
-    result.cloudinaryBytes     = parseInt(req.body.cloudinaryBytes) || 0;
-  }
-  // Priority 2: legacy multipart
-  const ebookFile = req.files?.ebook?.[0];
-  if (ebookFile) {
-    temps.push(ebookFile.path);
-    const ext = path.extname(ebookFile.originalname).toLowerCase().replace('.','');
-    const r   = await uploadToCloudinary(ebookFile.path, { folder:'lms/ebooks', resourceType:'raw' });
-    result.isEbook             = true;
-    result.ebookFormat         = ext;
-    result.cloudinaryPublicId  = r.publicId;
-    result.cloudinarySecureUrl = r.secureUrl;
-    result.cloudinaryBytes     = r.bytes;
-    cleanupTemp(ebookFile.path);
-  }
-
-  return result;
-};
-
-// ── POST /api/books ─────────────────────────────────────────────────────────
+// ── POST /api/books ────────────────────────────────────────────────────────────
 const createBook = async (req, res, next) => {
   const temps = [];
   try {
-    const data     = { ...req.body, addedBy: req.user._id };
+    const data = { ...req.body, addedBy: req.user._id };
     const bookType = data.bookType || 'physical';
-    data.bookType  = bookType;
+    data.bookType = bookType;
 
+    // Set copy counts based on type
     if (bookType === 'digital') {
-      data.totalCopies = 0; data.availableCopies = 0;
+      data.totalCopies = 0;
+      data.availableCopies = 0;
     } else {
       const copies = parseInt(data.totalCopies) || 1;
-      data.totalCopies = copies; data.availableCopies = copies;
+      data.totalCopies     = copies;
+      data.availableCopies = copies;
     }
 
+    // Coerce booleans from form-data strings
     ['readingEnabled','downloadEnabled','isDigitalSale','watermarkEnabled'].forEach(k => {
       if (k in data) data[k] = parseBool(data[k]);
     });
     if (!('watermarkEnabled' in req.body)) data.watermarkEnabled = true;
+
+    // Parse JSON arrays sent from FormData
     if (typeof data.authors    === 'string') try { data.authors    = JSON.parse(data.authors);    } catch {}
     if (typeof data.categories === 'string') try { data.categories = JSON.parse(data.categories); } catch {}
 
-    // Remove raw URL fields from data before merge (they come via extractMedia)
-    delete data.coverImagePublicId;
-    delete data.cloudinaryPublicId;
-    delete data.cloudinarySecureUrl;
-    delete data.cloudinaryBytes;
-    delete data.ebookFormat;
+    // Cover image
+    const coverFile = req.files?.cover?.[0];
+    if (coverFile) {
+      temps.push(coverFile.path);
+      const r = await uploadToCloudinary(coverFile.path, { folder:'lms/covers', resourceType:'image' });
+      data.coverImage = r.secureUrl; data.coverImagePublicId = r.publicId;
+      cleanupTemp(coverFile.path);
+    }
 
-    const media = await extractMediaFromRequest(req, temps);
-    Object.assign(data, media);
+    // Digital file (PDF/EPUB/MOBI)
+    const ebookFile = req.files?.ebook?.[0];
+    if (ebookFile) {
+      temps.push(ebookFile.path);
+      const ext = path.extname(ebookFile.originalname).toLowerCase().replace('.','');
+      const r   = await uploadToCloudinary(ebookFile.path, { folder:'lms/ebooks', resourceType:'raw' });
+      data.isEbook = true; data.ebookFormat = ext;
+      data.cloudinaryPublicId = r.publicId; data.cloudinarySecureUrl = r.secureUrl; data.cloudinaryBytes = r.bytes;
+      cleanupTemp(ebookFile.path);
+    }
 
     const book = await Book.create(data);
     await logActivity(req.user._id, 'CREATE_BOOK', `Added: ${book.title}`, req.ip, 'Books');
@@ -174,7 +140,7 @@ const createBook = async (req, res, next) => {
   } catch(e) { temps.forEach(cleanupTemp); next(e); }
 };
 
-// ── PUT /api/books/:id ──────────────────────────────────────────────────────
+// ── PUT /api/books/:id ────────────────────────────────────────────────────────
 const updateBook = async (req, res, next) => {
   const temps = [];
   try {
@@ -183,46 +149,57 @@ const updateBook = async (req, res, next) => {
 
     const upd = { ...req.body };
 
-    // Sync availableCopies on totalCopies change
+    // Sync availableCopies when totalCopies is updated
     if (upd.totalCopies !== undefined) {
-      const newTotal  = parseInt(upd.totalCopies) || 0;
-      const issuedOut = (existing.totalCopies || 0) - (existing.availableCopies || 0);
+      const newTotal   = parseInt(upd.totalCopies) || 0;
+      const issuedOut  = (existing.totalCopies || 0) - (existing.availableCopies || 0);
       upd.totalCopies     = newTotal;
       upd.availableCopies = Math.max(0, newTotal - issuedOut);
     }
-    if (upd.bookType === 'digital') { upd.totalCopies = 0; upd.availableCopies = 0; }
 
+    // Digital type sets copies to 0
+    if (upd.bookType === 'digital') {
+      upd.totalCopies = 0; upd.availableCopies = 0;
+    }
+
+    // Coerce booleans
     ['readingEnabled','downloadEnabled','isDigitalSale','watermarkEnabled'].forEach(k => {
       if (k in upd) upd[k] = parseBool(upd[k]);
     });
+
+    // Parse JSON arrays
     if (typeof upd.authors    === 'string') try { upd.authors    = JSON.parse(upd.authors);    } catch {}
     if (typeof upd.categories === 'string') try { upd.categories = JSON.parse(upd.categories); } catch {}
 
-    // Remove raw URL fields — they come via extractMedia
-    delete upd.coverImagePublicId;
-    delete upd.cloudinaryPublicId;
-    delete upd.cloudinarySecureUrl;
-    delete upd.cloudinaryBytes;
-    delete upd.ebookFormat;
-
-    const media = await extractMediaFromRequest(req, temps);
-
-    // Delete old Cloudinary assets if being replaced
-    if (media.coverImage && existing.coverImagePublicId) {
-      await deleteFromCloudinary(existing.coverImagePublicId, 'image').catch(() => {});
-    }
-    if (media.cloudinaryPublicId && existing.cloudinaryPublicId) {
-      await deleteFromCloudinary(existing.cloudinaryPublicId, 'raw').catch(() => {});
+    // Cover
+    const coverFile = req.files?.cover?.[0];
+    if (coverFile) {
+      temps.push(coverFile.path);
+      if (existing.coverImagePublicId) await deleteFromCloudinary(existing.coverImagePublicId,'image').catch(()=>{});
+      const r = await uploadToCloudinary(coverFile.path, { folder:'lms/covers', resourceType:'image' });
+      upd.coverImage = r.secureUrl; upd.coverImagePublicId = r.publicId;
+      cleanupTemp(coverFile.path);
     }
 
-    Object.assign(upd, media);
+    // Ebook
+    const ebookFile = req.files?.ebook?.[0];
+    if (ebookFile) {
+      temps.push(ebookFile.path);
+      if (existing.cloudinaryPublicId) await deleteFromCloudinary(existing.cloudinaryPublicId,'raw').catch(()=>{});
+      const ext = path.extname(ebookFile.originalname).toLowerCase().replace('.','');
+      const r   = await uploadToCloudinary(ebookFile.path, { folder:'lms/ebooks', resourceType:'raw' });
+      upd.isEbook=true; upd.ebookFormat=ext;
+      upd.cloudinaryPublicId=r.publicId; upd.cloudinarySecureUrl=r.secureUrl; upd.cloudinaryBytes=r.bytes;
+      cleanupTemp(ebookFile.path);
+    }
+
     const book = await Book.findByIdAndUpdate(req.params.id, upd, { new:true, runValidators:true });
     await logActivity(req.user._id, 'UPDATE_BOOK', `Updated: ${book.title}`, req.ip, 'Books');
     res.json({ success:true, book });
   } catch(e) { temps.forEach(cleanupTemp); next(e); }
 };
 
-// ── DELETE /api/books/:id ───────────────────────────────────────────────────
+// ── DELETE /api/books/:id ──────────────────────────────────────────────────────
 const deleteBook = async (req, res, next) => {
   try {
     const book = await Book.findByIdAndDelete(req.params.id);
@@ -234,7 +211,7 @@ const deleteBook = async (req, res, next) => {
   } catch(e) { next(e); }
 };
 
-// ── POST /api/books/import ──────────────────────────────────────────────────
+// ── POST /api/books/import ─────────────────────────────────────────────────────
 const importBooks = async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ success:false, message:'No file uploaded' });
@@ -264,7 +241,7 @@ const importBooks = async (req, res, next) => {
   } catch(e) { next(e); }
 };
 
-// ── GET /api/books/export ───────────────────────────────────────────────────
+// ── GET /api/books/export ──────────────────────────────────────────────────────
 const exportBooks = async (req, res, next) => {
   try {
     const books = await Book.find({}).populate('authors','name').populate('categories','name').populate('publisher','name');

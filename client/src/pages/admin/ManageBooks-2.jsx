@@ -5,7 +5,6 @@ import BookGallery from '../../components/books/BookGallery';
 import BookDigitalSettings from '../../components/books/BookDigitalSettings';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { getImageUrl, imgOnError } from '../../utils/image';
-import CloudinaryUploader from '../../components/ui/CloudinaryUploader';
 import toast from 'react-hot-toast';
 import {
   PlusIcon, PencilIcon, TrashIcon, ArrowUpTrayIcon, ArrowDownTrayIcon,
@@ -45,10 +44,9 @@ export default function ManageBooks() {
   const [modalOpen, setModalOpen]   = useState(false);
   const [editBook, setEditBook]     = useState(null);
   const [form, setForm]         = useState(EMPTY);
-  const [coverData, setCoverData]   = useState(null);  // { secureUrl, publicId }
-  const [ebookData, setEbookData]   = useState(null);  // { secureUrl, publicId, format }
+  const [coverFile, setCoverFile]   = useState(null);
   const [coverPreview, setCoverPreview] = useState(null);
-  const [coverFile, setCoverFile] = useState(null); //new Added
+  const [ebookFile, setEbookFile]   = useState(null);
   const [saving, setSaving]     = useState(false);
   const [deleteId, setDeleteId] = useState(null);
   const [galleryBook, setGalleryBook] = useState(null);
@@ -87,21 +85,12 @@ export default function ManageBooks() {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  // ✅ ADD HERE
-      const handleCoverChange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        setCoverFile(file);
-        setCoverPreview(URL.createObjectURL(file));
-      };
-
   const openCreate = () => {
     setEditBook(null);
     setForm(EMPTY);
-    setCoverData(null);
-    setEbookData(null);
+    setCoverFile(null);
     setCoverPreview(null);
+    setEbookFile(null);
     setModalOpen(true);
   };
 
@@ -122,37 +111,38 @@ export default function ManageBooks() {
       watermarkEnabled:   book.watermarkEnabled !== false,
       readingAccessLevel: book.readingAccessLevel || 'member',
     });
-    setCoverData(null);
-    setEbookData(null);
+    setCoverFile(null);
     setCoverPreview(getImageUrl(book.coverImage));
+    setEbookFile(null);
     setModalOpen(true);
+  };
+
+  const handleCoverChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setCoverFile(file);
+    setCoverPreview(URL.createObjectURL(file));
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
-      // Build JSON payload — URLs already on Cloudinary, no file uploads here
-      const payload = { ...form };
-      if (Array.isArray(payload.authors))    payload.authors    = JSON.stringify(payload.authors);
-      if (Array.isArray(payload.categories)) payload.categories = JSON.stringify(payload.categories);
-      if (coverData) {
-        payload.coverImage         = coverData.secureUrl;
-        payload.coverImagePublicId = coverData.publicId;
-      }
-      if (ebookData) {
-        payload.cloudinarySecureUrl = ebookData.secureUrl;
-        payload.cloudinaryPublicId  = ebookData.publicId;
-        payload.ebookFormat         = ebookData.format;
-        payload.cloudinaryBytes     = ebookData.bytes || 0;
-      }
+      const fd = new FormData();
+      Object.entries(form).forEach(([k, v]) => {
+        if (Array.isArray(v)) fd.append(k, JSON.stringify(v));
+        else fd.append(k, v);
+      });
+      if (coverFile) fd.append('cover', coverFile);
+      if (ebookFile) fd.append('ebook', ebookFile);
 
+      const headers = { 'Content-Type': 'multipart/form-data' };
       if (editBook) {
-        const { data } = await api.put(`/books/${editBook._id}`, payload);
+        const { data } = await api.put(`/books/${editBook._id}`, fd, { headers });
         setBooks(prev => prev.map(b => b._id === editBook._id ? data.book : b));
         toast.success('Book updated');
       } else {
-        const { data } = await api.post('/books', payload);
+        const { data } = await api.post('/books', fd, { headers });
         setBooks(prev => [data.book, ...prev]);
         toast.success('Book created');
       }
@@ -404,24 +394,18 @@ export default function ManageBooks() {
                 <DocumentIcon className="h-4 w-4" /><span>Digital File Settings</span>
               </h3>
               <div>
-                <label className="label">Upload Digital File (PDF, EPUB, MOBI)</label>
-                {editBook?.cloudinaryPublicId && !ebookData && (
-                  <p className="text-xs text-green-600 mb-2">✅ File already on Cloudinary (.{editBook.ebookFormat})</p>
-                )}
-                <CloudinaryUploader
-                  folder="lms/ebooks"
-                  resourceType="raw"
-                  accept=".pdf,.epub,.mobi,application/pdf"
-                  multiple={false}
-                  showUrlInput
-                  label="Upload PDF / EPUB / MOBI"
-                  onUploaded={(results) => {
-                    const r = results[0];
-                    setEbookData({ ...r, format: r.format || r.secureUrl?.split('.').pop() || '' });
-                  }}
-                />
-                {ebookData && (
-                  <p className="text-xs text-green-600 mt-1">✅ New file ready: {ebookData.secureUrl?.split('/').pop()}</p>
+                <label className="label">Upload File (PDF, EPUB, MOBI)</label>
+                <div className="flex items-center space-x-3 mt-1">
+                  <label className="btn-secondary text-sm cursor-pointer flex items-center space-x-2">
+                    <ArrowUpTrayIcon className="h-4 w-4" />
+                    <span>{ebookFile ? ebookFile.name : editBook?.ebookFormat ? `Current: .${editBook.ebookFormat}` : 'Choose file'}</span>
+                    <input type="file" className="hidden" accept=".pdf,.epub,.mobi"
+                      onChange={e => setEbookFile(e.target.files[0] || null)} />
+                  </label>
+                  {ebookFile && <button type="button" onClick={() => setEbookFile(null)} className="text-xs text-red-500">Remove</button>}
+                </div>
+                {editBook?.cloudinaryPublicId && !ebookFile && (
+                  <p className="text-xs text-green-600 mt-1">✅ File already uploaded</p>
                 )}
               </div>
               <div className="bg-white rounded-lg p-3 border border-purple-100 space-y-1">
@@ -470,22 +454,10 @@ export default function ManageBooks() {
                 <span>{coverFile ? coverFile.name : 'Choose cover image'}</span>
                 <input type="file" className="hidden" accept="image/*" onChange={handleCoverChange} />
               </label>
-{/*              {coverFile && (
+              {coverFile && (
                 <button type="button" onClick={() => { setCoverFile(null); setCoverPreview(editBook ? getImageUrl(editBook.coverImage) : null); }}
                   className="text-xs text-red-500">Remove</button>
-              )}*/}
-              {coverFile && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCoverFile(null);
-                      setCoverPreview(editBook ? getImageUrl(editBook.coverImage) : null);
-                    }}
-                    className="text-xs text-red-500"
-                  >
-                    Remove
-                  </button>
-                )}
+              )}
             </div>
           </div>
 
