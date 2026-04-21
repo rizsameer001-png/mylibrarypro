@@ -13,7 +13,7 @@ export const BookCard = ({ book, onReserve, reserved, priceDisplay }) => {
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col group">
       <Link to={`/books/${book._id}`} className="block">
-        <div className="relative h-48 bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
+        <div className="relative w-full aspect-[3/4] bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
           <img
             src={coverSrc}
             alt={book.title}
