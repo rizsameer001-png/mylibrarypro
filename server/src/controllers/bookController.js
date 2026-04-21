@@ -91,46 +91,112 @@ const getBook = async (req, res, next) => {
 
 // ── Shared helper: extract image/ebook data from request ────────────────────
 // Supports BOTH direct-upload (URL in body) and legacy multipart (file upload)
+// const extractMediaFromRequest = async (req, temps = []) => {
+//   const result = {};
+
+//   // ── Cover image ────────────────────────────────────────────────────────────
+//   // Priority 1: client already uploaded to Cloudinary → sends URLs in body
+//   if (req.body.coverImage && (req.body.coverImage.startsWith('http') || req.body.coverImage.startsWith('/'))) {
+//     result.coverImage        = req.body.coverImage;
+//     result.coverImagePublicId = req.body.coverImagePublicId || '';
+//   }
+//   // Priority 2: legacy multipart file → upload now
+//   const coverFile = req.files?.cover?.[0];
+//   if (coverFile) {
+//     temps.push(coverFile.path);
+//     const r = await uploadToCloudinary(coverFile.path, { folder:'lms/covers', resourceType:'image' });
+//     result.coverImage         = r.secureUrl;
+//     result.coverImagePublicId = r.publicId;
+//     cleanupTemp(coverFile.path);
+//   }
+
+//   // ── Digital file ───────────────────────────────────────────────────────────
+//   // Priority 1: client already uploaded to Cloudinary
+//   if (req.body.cloudinarySecureUrl && req.body.cloudinarySecureUrl.startsWith('http')) {
+//     result.isEbook             = true;
+//     result.ebookFormat         = req.body.ebookFormat || '';
+//     result.cloudinaryPublicId  = req.body.cloudinaryPublicId || '';
+//     result.cloudinarySecureUrl = req.body.cloudinarySecureUrl;
+//     result.cloudinaryBytes     = parseInt(req.body.cloudinaryBytes) || 0;
+//   }
+//   // Priority 2: legacy multipart
+//   const ebookFile = req.files?.ebook?.[0];
+//   if (ebookFile) {
+//     temps.push(ebookFile.path);
+//     const ext = path.extname(ebookFile.originalname).toLowerCase().replace('.','');
+//     const r   = await uploadToCloudinary(ebookFile.path, { folder:'lms/ebooks', resourceType:'raw' });
+//     result.isEbook             = true;
+//     result.ebookFormat         = ext;
+//     result.cloudinaryPublicId  = r.publicId;
+//     result.cloudinarySecureUrl = r.secureUrl;
+//     result.cloudinaryBytes     = r.bytes;
+//     cleanupTemp(ebookFile.path);
+//   }
+
+//   return result;
+// };
+
+// ── Shared helper: extract image/ebook data from request ────────────────────
 const extractMediaFromRequest = async (req, temps = []) => {
   const result = {};
+  
+  // Toggle this based on your .env
+  const useCloudinary = process.env.NODE_ENV === 'production' || process.env.USE_CLOUDINARY === 'true';
 
   // ── Cover image ────────────────────────────────────────────────────────────
-  // Priority 1: client already uploaded to Cloudinary → sends URLs in body
-  if (req.body.coverImage && (req.body.coverImage.startsWith('http') || req.body.coverImage.startsWith('/'))) {
-    result.coverImage        = req.body.coverImage;
+  // 1. Check if client already provided a Cloudinary URL (Direct Upload)
+  if (req.body.coverImage && req.body.coverImage.startsWith('http')) {
+    result.coverImage = req.body.coverImage;
     result.coverImagePublicId = req.body.coverImagePublicId || '';
-  }
-  // Priority 2: legacy multipart file → upload now
-  const coverFile = req.files?.cover?.[0];
-  if (coverFile) {
-    temps.push(coverFile.path);
-    const r = await uploadToCloudinary(coverFile.path, { folder:'lms/covers', resourceType:'image' });
-    result.coverImage         = r.secureUrl;
-    result.coverImagePublicId = r.publicId;
-    cleanupTemp(coverFile.path);
+  } 
+  // 2. Handle file upload (Multipart)
+  else {
+    const coverFile = req.files?.cover?.[0];
+    if (coverFile) {
+      if (useCloudinary) {
+        // PRODUCTION: Upload to Cloudinary
+        const r = await uploadToCloudinary(coverFile.path, { folder: 'lms/covers', resourceType: 'image' });
+        result.coverImage = r.secureUrl;
+        result.coverImagePublicId = r.publicId;
+        cleanupTemp(coverFile.path); // Delete local temp file
+      } else {
+        // DEVELOPMENT: Store local path
+        // We save 'uploads/covers/filename.jpg' to the DB
+        const fileName = coverFile.filename || path.basename(coverFile.path);
+        result.coverImage = `uploads/covers/${fileName}`;
+        result.coverImagePublicId = ''; // No public ID for local files
+        // Note: Do NOT cleanupTemp here if your multer is already saving to 'uploads/covers'
+      }
+    }
   }
 
-  // ── Digital file ───────────────────────────────────────────────────────────
-  // Priority 1: client already uploaded to Cloudinary
+  // ── Digital file (E-book) ──────────────────────────────────────────────────
   if (req.body.cloudinarySecureUrl && req.body.cloudinarySecureUrl.startsWith('http')) {
-    result.isEbook             = true;
-    result.ebookFormat         = req.body.ebookFormat || '';
-    result.cloudinaryPublicId  = req.body.cloudinaryPublicId || '';
+    result.isEbook = true;
+    result.ebookFormat = req.body.ebookFormat || '';
+    result.cloudinaryPublicId = req.body.cloudinaryPublicId || '';
     result.cloudinarySecureUrl = req.body.cloudinarySecureUrl;
-    result.cloudinaryBytes     = parseInt(req.body.cloudinaryBytes) || 0;
-  }
-  // Priority 2: legacy multipart
-  const ebookFile = req.files?.ebook?.[0];
-  if (ebookFile) {
-    temps.push(ebookFile.path);
-    const ext = path.extname(ebookFile.originalname).toLowerCase().replace('.','');
-    const r   = await uploadToCloudinary(ebookFile.path, { folder:'lms/ebooks', resourceType:'raw' });
-    result.isEbook             = true;
-    result.ebookFormat         = ext;
-    result.cloudinaryPublicId  = r.publicId;
-    result.cloudinarySecureUrl = r.secureUrl;
-    result.cloudinaryBytes     = r.bytes;
-    cleanupTemp(ebookFile.path);
+    result.cloudinaryBytes = parseInt(req.body.cloudinaryBytes) || 0;
+  } else {
+    const ebookFile = req.files?.ebook?.[0];
+    if (ebookFile) {
+      const ext = path.extname(ebookFile.originalname).toLowerCase().replace('.', '');
+      if (useCloudinary) {
+        const r = await uploadToCloudinary(ebookFile.path, { folder: 'lms/ebooks', resourceType: 'raw' });
+        result.isEbook = true;
+        result.ebookFormat = ext;
+        result.cloudinaryPublicId = r.publicId;
+        result.cloudinarySecureUrl = r.secureUrl;
+        result.cloudinaryBytes = r.bytes;
+        cleanupTemp(ebookFile.path);
+      } else {
+        const fileName = ebookFile.filename || path.basename(ebookFile.path);
+        result.isEbook = true;
+        result.ebookFormat = ext;
+        result.cloudinarySecureUrl = `uploads/ebooks/${fileName}`;
+        result.cloudinaryBytes = ebookFile.size || 0;
+      }
+    }
   }
 
   return result;

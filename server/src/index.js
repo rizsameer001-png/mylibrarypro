@@ -1,11 +1,10 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const path = require('path');
 const cron = require('node-cron');
-
+require('dotenv').config();
 
 const connectDB = require('./config/db');
 const { errorHandler } = require('./middleware/errorHandler');
@@ -25,9 +24,10 @@ const notificationRoutes = require('./routes/notifications');
 const reportRoutes = require('./routes/reports');
 const cmsRoutes = require('./routes/cms');
 const dashboardRoutes = require('./routes/dashboard');
-const galleryRoutes = require('./routes/gallery');
-const digitalRoutes  = require('./routes/digital');
+const galleryRoutes    = require('./routes/gallery');
 const cloudinaryRoutes = require('./routes/cloudinary');
+const digitalRoutes  = require('./routes/digital');
+const readerRoutes   = require('./routes/reader');
 
 const app = express();
 
@@ -51,7 +51,14 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Static files
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// index.js
+
+// Static files - only really needed for Local Dev
+if (process.env.NODE_ENV === 'development') {
+  app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+  console.log("📁 Serving local uploads for Development");
+}
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -69,6 +76,7 @@ app.use('/api/cms', cmsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/books/:id/gallery', galleryRoutes);
 app.use('/api/digital', digitalRoutes);
+app.use('/api/reader',  readerRoutes);
 app.use('/api/cloudinary', cloudinaryRoutes);
 
 // Health check

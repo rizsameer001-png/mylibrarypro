@@ -183,21 +183,44 @@ export default function Home() {
       )}
 
       {/* ── Features ──────────────────────────────────────────────────────────── */}
-      <section className="max-w-7xl mx-auto px-4 py-14">
+{/*      <section className="max-w-7xl mx-auto px-4 py-14">
         <h2 className="text-2xl font-bold text-gray-900 mb-10 text-center">Why Choose Us?</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {(cms?.featuresSection?.length ? cms.featuresSection : features).map((f, i) => (
             <div key={i} className="text-center p-6 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-              {/*<div className="text-3xl mb-3">{f.icon || '✨'}</div>*/}
-               <div className="text-3xl mb-3">
-                 {f.icon ? <f.icon className="h-8 w-8 mx-auto" /> : '✨'}
-              </div>
+              <div className="text-3xl mb-3">{f.icon || '✨'}</div>
               <h3 className="font-semibold text-gray-900 mb-2">{f.title}</h3>
               <p className="text-sm text-gray-500 leading-relaxed">{f.description || f.desc}</p>
             </div>
           ))}
         </div>
-      </section>
+      </section>*/}
+
+      {/* ── Features ──────────────────────────────────────────────────────────── */}
+<section className="max-w-7xl mx-auto px-4 py-14">
+  <h2 className="text-2xl font-bold text-gray-900 mb-10 text-center">Why Choose Us?</h2>
+  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+    {(cms?.featuresSection?.length ? cms.featuresSection : features).map((f, i) => {
+      // 1. Assign the icon to a capitalized variable
+      const IconComponent = f.icon; 
+
+      return (
+        <div key={i} className="text-center p-6 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+          <div className="text-3xl mb-3 flex justify-center">
+            {/* 2. Check if f.icon is a component or a string (emoji) */}
+            {typeof f.icon === 'function' || typeof f.icon === 'object' ? (
+              <IconComponent className="h-8 w-8 text-primary-600" />
+            ) : (
+              <span>{f.icon || '✨'}</span>
+            )}
+          </div>
+          <h3 className="font-semibold text-gray-900 mb-2">{f.title}</h3>
+          <p className="text-sm text-gray-500 leading-relaxed">{f.description || f.desc}</p>
+        </div>
+      );
+    })}
+  </div>
+</section>
 
       {/* ── Membership Plans ──────────────────────────────────────────────────── */}
       {plans.length > 0 && (

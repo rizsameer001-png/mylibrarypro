@@ -45,6 +45,7 @@ export default function ManageBooks() {
   const [modalOpen, setModalOpen]   = useState(false);
   const [editBook, setEditBook]     = useState(null);
   const [form, setForm]         = useState(EMPTY);
+  const [coverFile, setCoverFile] = useState(null); // Add this line
   const [coverData, setCoverData]   = useState(null);  // { secureUrl, publicId }
   const [ebookData, setEbookData]   = useState(null);  // { secureUrl, publicId, format }
   const [coverPreview, setCoverPreview] = useState(null);
@@ -55,8 +56,6 @@ export default function ManageBooks() {
   const [categories, setCategories]   = useState([]);
   const [authors, setAuthors]         = useState([]);
   const [publishers, setPublishers]   = useState([]);
-  // ✅ ADD THIS (missing state for cover file)
-  // const [coverFile, setCoverFile] = useState(null); 
   const importRef = useRef();
 
   useEffect(() => {
@@ -94,6 +93,7 @@ export default function ManageBooks() {
     setCoverData(null);
     setEbookData(null);
     setCoverPreview(null);
+    setCoverFile(null); // Add this to clear previous selection
     setModalOpen(true);
   };
 
@@ -120,31 +120,83 @@ export default function ManageBooks() {
     setModalOpen(true);
   };
 
+  // const handleSave = async (e) => {
+  //   e.preventDefault();
+  //   setSaving(true);
+  //   try {
+  //     // Build JSON payload — URLs already on Cloudinary, no file uploads here
+  //     const payload = { ...form };
+  //     if (Array.isArray(payload.authors))    payload.authors    = JSON.stringify(payload.authors);
+  //     if (Array.isArray(payload.categories)) payload.categories = JSON.stringify(payload.categories);
+  //     if (coverData) {
+  //       payload.coverImage         = coverData.secureUrl;
+  //       payload.coverImagePublicId = coverData.publicId;
+  //     }
+  //     if (ebookData) {
+  //       payload.cloudinarySecureUrl = ebookData.secureUrl;
+  //       payload.cloudinaryPublicId  = ebookData.publicId;
+  //       payload.ebookFormat         = ebookData.format;
+  //       payload.cloudinaryBytes     = ebookData.bytes || 0;
+  //     }
+
+  //     if (editBook) {
+  //       const { data } = await api.put(`/books/${editBook._id}`, payload);
+  //       setBooks(prev => prev.map(b => b._id === editBook._id ? data.book : b));
+  //       toast.success('Book updated');
+  //     } else {
+  //       const { data } = await api.post('/books', payload);
+  //       setBooks(prev => [data.book, ...prev]);
+  //       toast.success('Book created');
+  //     }
+  //     setModalOpen(false);
+  //   } catch (err) {
+  //     toast.error(err.response?.data?.message || 'Save failed');
+  //   } finally { setSaving(false); }
+  // };
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
-      // Build JSON payload — URLs already on Cloudinary, no file uploads here
-      const payload = { ...form };
-      if (Array.isArray(payload.authors))    payload.authors    = JSON.stringify(payload.authors);
-      if (Array.isArray(payload.categories)) payload.categories = JSON.stringify(payload.categories);
-      if (coverData) {
-        payload.coverImage         = coverData.secureUrl;
-        payload.coverImagePublicId = coverData.publicId;
+      const formData = new FormData();
+      
+      // Add all text fields to FormData
+      Object.keys(form).forEach(key => {
+        if (Array.isArray(form[key])) {
+          formData.append(key, JSON.stringify(form[key]));
+        } else {
+          formData.append(key, form[key]);
+        }
+      });
+
+      // Add the physical file if the user picked one
+      if (coverFile) {
+        formData.append('coverImage', coverFile);
       }
+
+      // Add Cloudinary data if it exists
+      if (coverData) {
+        formData.append('coverImageRemote', coverData.secureUrl);
+        formData.append('coverImagePublicId', coverData.publicId);
+      }
+
       if (ebookData) {
-        payload.cloudinarySecureUrl = ebookData.secureUrl;
-        payload.cloudinaryPublicId  = ebookData.publicId;
-        payload.ebookFormat         = ebookData.format;
-        payload.cloudinaryBytes     = ebookData.bytes || 0;
+        formData.append('cloudinarySecureUrl', ebookData.secureUrl);
+        formData.append('cloudinaryPublicId', ebookData.publicId);
+        formData.append('ebookFormat', ebookData.format);
+        formData.append('cloudinaryBytes', ebookData.bytes || 0);
       }
 
       if (editBook) {
-        const { data } = await api.put(`/books/${editBook._id}`, payload);
+        const { data } = await api.put(`/books/${editBook._id}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
         setBooks(prev => prev.map(b => b._id === editBook._id ? data.book : b));
         toast.success('Book updated');
       } else {
-        const { data } = await api.post('/books', payload);
+        const { data } = await api.post('/books', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
         setBooks(prev => [data.book, ...prev]);
         toast.success('Book created');
       }
@@ -184,17 +236,19 @@ export default function ManageBooks() {
     } catch { toast.error('Export failed'); }
   };
 
-  // ✅ Handle cover image selection (ADD HERE)
-    // const handleCoverChange = (e) => {
-    //   const file = e.target.files[0];
-    //   if (!file) return;
+  const handleCoverChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-    //   setCoverFile(file); // store file
+    setCoverFile(file);
 
-    //   // preview for UI
-    //   const previewUrl = URL.createObjectURL(file);
-    //   setCoverPreview(previewUrl);
-    // };
+    // This creates the small preview image you see in the modal
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setCoverPreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const toggleMulti = (key, id) => setForm(prev => ({
     ...prev,
@@ -275,12 +329,20 @@ export default function ManageBooks() {
                       </div>
                     </div>
                   </td>
-                  <td className="td text-xs text-gray-500 max-w-[120px]">
+{/*                  <td className="td text-xs text-gray-500 max-w-[120px]">
                     <div className="truncate">{book.authors?.map(a => a.name).join(', ') || '—'}</div>
                   </td>
                   <td className="td text-xs max-w-[100px]">
                     <div className="truncate">{book.categories?.map(c => c.name).join(', ') || '—'}</div>
-                  </td>
+                  </td>*/}
+                  <td className="td text-xs text-gray-500 max-w-[120px]">
+                      {/* Add optional chaining here to be safe */}
+                      <div className="truncate">{book.authors?.map(a => a?.name).join(', ') || '—'}</div>
+                    </td>
+                    <td className="td text-xs max-w-[100px]">
+                      {/* Add optional chaining here too */}
+                      <div className="truncate">{book.categories?.map(c => c?.name).join(', ') || '—'}</div>
+                    </td>
                   <td className="td">
                     <span className={typeBadge(book.bookType)}>{book.bookType}</span>
                     {book.ebookFormat && (
@@ -458,7 +520,7 @@ export default function ManageBooks() {
           )}
 
           {/* Cover image */}
-{/*          <div>
+          <div>
             <label className="label">Cover Image</label>
             <div className="flex items-center space-x-3 mt-1">
               <div className="h-24 w-16 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 flex-shrink-0">
@@ -472,65 +534,21 @@ export default function ManageBooks() {
               <label className="btn-secondary text-sm cursor-pointer flex items-center space-x-2">
                 <ArrowUpTrayIcon className="h-4 w-4" />
                 <span>{coverFile ? coverFile.name : 'Choose cover image'}</span>
-                <input type="file" className="hidden" accept="image/*" onChange={handleCoverChange} />
+                {/*<input type="file" className="hidden" accept="image/*" onChange={handleCoverChange} />*/}
+              <input 
+                  key={coverFile ? 'loaded' : 'empty'} // Resets the input element
+                  type="file" 
+                  className="hidden" 
+                  accept="image/*" 
+                  onChange={handleCoverChange} 
+                />
               </label>
               {coverFile && (
                 <button type="button" onClick={() => { setCoverFile(null); setCoverPreview(editBook ? getImageUrl(editBook.coverImage) : null); }}
                   className="text-xs text-red-500">Remove</button>
               )}
             </div>
-          </div>*/}
-
-          {/* ✅ FIXED: Cover image using Cloudinary only */}
-<div>
-  <label className="label">Cover Image</label>
-
-  <div className="flex items-center space-x-3 mt-1">
-    {/* Preview */}
-    <div className="h-24 w-16 rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
-      <img
-        src={coverPreview || '/no-cover.svg'}
-        alt="Cover preview"
-        className="h-full w-full object-cover"
-        onError={imgOnError}
-      />
-    </div>
-
-    {/* ✅ Cloudinary uploader */}
-    <CloudinaryUploader
-      folder="lms/covers"
-      accept="image/*"
-      multiple={false}
-      label="Upload Cover"
-      onUploaded={(results) => {
-        const r = results[0];
-
-        // ✅ IMPORTANT: used in API payload
-        setCoverData({
-          secureUrl: r.secureUrl,
-          publicId: r.publicId,
-        });
-
-        // ✅ preview update
-        setCoverPreview(r.secureUrl);
-      }}
-    />
-
-    {/* ✅ Remove button */}
-    {coverPreview && (
-      <button
-        type="button"
-        onClick={() => {
-          setCoverData(null);
-          setCoverPreview(editBook ? getImageUrl(editBook.coverImage) : null);
-        }}
-        className="text-xs text-red-500"
-      >
-        Remove
-      </button>
-    )}
-  </div>
-</div>
+          </div>
 
           {/* Categories */}
           <div>
