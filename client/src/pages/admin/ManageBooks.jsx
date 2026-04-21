@@ -48,7 +48,6 @@ export default function ManageBooks() {
   const [coverData, setCoverData]   = useState(null);  // { secureUrl, publicId }
   const [ebookData, setEbookData]   = useState(null);  // { secureUrl, publicId, format }
   const [coverPreview, setCoverPreview] = useState(null);
-  const [coverFile, setCoverFile] = useState(null); //new Added
   const [saving, setSaving]     = useState(false);
   const [deleteId, setDeleteId] = useState(null);
   const [galleryBook, setGalleryBook] = useState(null);
@@ -56,6 +55,8 @@ export default function ManageBooks() {
   const [categories, setCategories]   = useState([]);
   const [authors, setAuthors]         = useState([]);
   const [publishers, setPublishers]   = useState([]);
+  // ✅ ADD THIS (missing state for cover file)
+  // const [coverFile, setCoverFile] = useState(null); 
   const importRef = useRef();
 
   useEffect(() => {
@@ -86,15 +87,6 @@ export default function ManageBooks() {
   };
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  // ✅ ADD HERE
-      const handleCoverChange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        setCoverFile(file);
-        setCoverPreview(URL.createObjectURL(file));
-      };
 
   const openCreate = () => {
     setEditBook(null);
@@ -191,6 +183,18 @@ export default function ManageBooks() {
       const a = document.createElement('a'); a.href = url; a.download = 'books.xlsx'; a.click();
     } catch { toast.error('Export failed'); }
   };
+
+  // ✅ Handle cover image selection (ADD HERE)
+    // const handleCoverChange = (e) => {
+    //   const file = e.target.files[0];
+    //   if (!file) return;
+
+    //   setCoverFile(file); // store file
+
+    //   // preview for UI
+    //   const previewUrl = URL.createObjectURL(file);
+    //   setCoverPreview(previewUrl);
+    // };
 
   const toggleMulti = (key, id) => setForm(prev => ({
     ...prev,
@@ -454,7 +458,7 @@ export default function ManageBooks() {
           )}
 
           {/* Cover image */}
-          <div>
+{/*          <div>
             <label className="label">Cover Image</label>
             <div className="flex items-center space-x-3 mt-1">
               <div className="h-24 w-16 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 flex-shrink-0">
@@ -470,24 +474,63 @@ export default function ManageBooks() {
                 <span>{coverFile ? coverFile.name : 'Choose cover image'}</span>
                 <input type="file" className="hidden" accept="image/*" onChange={handleCoverChange} />
               </label>
-{/*              {coverFile && (
+              {coverFile && (
                 <button type="button" onClick={() => { setCoverFile(null); setCoverPreview(editBook ? getImageUrl(editBook.coverImage) : null); }}
                   className="text-xs text-red-500">Remove</button>
-              )}*/}
-              {coverFile && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCoverFile(null);
-                      setCoverPreview(editBook ? getImageUrl(editBook.coverImage) : null);
-                    }}
-                    className="text-xs text-red-500"
-                  >
-                    Remove
-                  </button>
-                )}
+              )}
             </div>
-          </div>
+          </div>*/}
+
+          {/* ✅ FIXED: Cover image using Cloudinary only */}
+<div>
+  <label className="label">Cover Image</label>
+
+  <div className="flex items-center space-x-3 mt-1">
+    {/* Preview */}
+    <div className="h-24 w-16 rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
+      <img
+        src={coverPreview || '/no-cover.svg'}
+        alt="Cover preview"
+        className="h-full w-full object-cover"
+        onError={imgOnError}
+      />
+    </div>
+
+    {/* ✅ Cloudinary uploader */}
+    <CloudinaryUploader
+      folder="lms/covers"
+      accept="image/*"
+      multiple={false}
+      label="Upload Cover"
+      onUploaded={(results) => {
+        const r = results[0];
+
+        // ✅ IMPORTANT: used in API payload
+        setCoverData({
+          secureUrl: r.secureUrl,
+          publicId: r.publicId,
+        });
+
+        // ✅ preview update
+        setCoverPreview(r.secureUrl);
+      }}
+    />
+
+    {/* ✅ Remove button */}
+    {coverPreview && (
+      <button
+        type="button"
+        onClick={() => {
+          setCoverData(null);
+          setCoverPreview(editBook ? getImageUrl(editBook.coverImage) : null);
+        }}
+        className="text-xs text-red-500"
+      >
+        Remove
+      </button>
+    )}
+  </div>
+</div>
 
           {/* Categories */}
           <div>
