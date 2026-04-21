@@ -56,6 +56,12 @@ if (process.env.NODE_ENV === 'development') {
 
 // Static files - only really needed for Local Dev
 if (process.env.NODE_ENV === 'development') {
+  const fs = require('fs');
+const testPath = path.join(__dirname, '../uploads');
+console.log('--- DEBUG ---');
+console.log('Absolute path to uploads:', path.resolve(testPath));
+console.log('Does folder exist?:', fs.existsSync(testPath));
+console.log('-------------');
   app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
   console.log("📁 Serving local uploads for Development");
 }
