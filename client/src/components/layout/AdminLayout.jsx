@@ -5,7 +5,7 @@ import {
   BookOpenIcon, HomeIcon, UsersIcon, ArrowsRightLeftIcon, TagIcon,
   ChartBarIcon, DocumentTextIcon, Cog6ToothIcon, ExclamationTriangleIcon,
   CreditCardIcon, GlobeAltIcon, Bars3Icon, XMarkIcon, ArrowRightOnRectangleIcon,
-  UserGroupIcon,
+  UserGroupIcon,MegaphoneIcon, NewspaperIcon   // <-- add these
 } from '@heroicons/react/24/outline';
 
 const navItems = [
@@ -18,6 +18,8 @@ const navItems = [
   { to: '/admin/penalties',    label: 'Penalties',     icon: ExclamationTriangleIcon },
   { to: '/admin/memberships',  label: 'Memberships',   icon: CreditCardIcon },
   { to: '/admin/reports',      label: 'Reports',       icon: ChartBarIcon },
+  { to: '/admin/banners',      label: 'Banners & Ads', icon: MegaphoneIcon },
+  { to: '/admin/blogs',         label: 'Blog Posts',    icon: NewspaperIcon },
   { to: '/admin/cms',          label: 'CMS',           icon: GlobeAltIcon },
   { to: '/admin/settings',     label: 'Settings',      icon: Cog6ToothIcon },
 ];
